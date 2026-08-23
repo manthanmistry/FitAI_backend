@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -8,12 +8,18 @@ from app.schemas import UserProfileIn
 from app.calculations import full_calculation
 from app import models
 from app.ai_service import stream_plan
+from app.auth_models import AuthUser
+from app.deps import get_current_user, apply_profile
 
 router = APIRouter(tags=["plan"])
 
 
 @router.post("/generate-plan")
-def generate_plan(profile: UserProfileIn, db: Session = Depends(get_db)):
+def generate_plan(
+    profile: UserProfileIn,
+    db: Session = Depends(get_db),
+    auth_user: AuthUser = Depends(get_current_user),
+):
     calc = full_calculation(
         weight_kg=profile.weight_kg,
         height_cm=profile.height_cm,
@@ -23,28 +29,13 @@ def generate_plan(profile: UserProfileIn, db: Session = Depends(get_db)):
         goal=profile.goal.value,
     )
 
-    # Upsert-ish: create a new user record for this submission (simple model, no auth)
-    user = models.User(
-        name=profile.name,
-        age=profile.age,
-        gender=profile.gender.value,
-        height_cm=profile.height_cm,
-        weight_kg=profile.weight_kg,
-        target_weight_kg=profile.target_weight_kg,
-        activity_level=profile.activity_level.value,
-        sleep_hours=profile.sleep_hours,
-        stress_level=profile.stress_level.value,
-        water_intake_l=profile.water_intake_l,
-        goal=profile.goal.value,
-        workout_experience=profile.workout_experience.value,
-        workout_days_per_week=profile.workout_days_per_week,
-        workout_duration_min=profile.workout_duration_min,
-        workout_location=profile.workout_location.value,
-        diet_type=profile.diet_type.value,
-        allergies=profile.allergies,
-        medical_conditions=profile.medical_conditions,
-    )
-    db.add(user)
+    user = db.query(models.User).filter(models.User.auth_user_id == auth_user.id).first()
+    if user:
+        apply_profile(user, profile)
+    else:
+        user = models.User(auth_user_id=auth_user.id)
+        apply_profile(user, profile)
+        db.add(user)
     db.commit()
     db.refresh(user)
 
@@ -66,7 +57,6 @@ def generate_plan(profile: UserProfileIn, db: Session = Depends(get_db)):
 
     def event_generator():
         collected = []
-        # Send metadata first so the frontend knows the ids and metrics
         meta = {"type": "meta", "user_id": user_id, "plan_id": plan_id, "calculations": calc}
         yield f"data: {json.dumps(meta)}\n\n"
 
@@ -74,11 +64,10 @@ def generate_plan(profile: UserProfileIn, db: Session = Depends(get_db)):
             for chunk in stream_plan(profile_dict, calc):
                 collected.append(chunk)
                 yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-        except Exception as exc:  # surface a clean error to the client
+        except Exception as exc:
             yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
         finally:
             full_text = "".join(collected)
-            # persist the final plan text in its own short-lived session
             from app.database import SessionLocal
             session = SessionLocal()
             try:
@@ -94,8 +83,19 @@ def generate_plan(profile: UserProfileIn, db: Session = Depends(get_db)):
 
 
 @router.get("/plan/{plan_id}")
-def get_plan(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(models.Plan).filter(models.Plan.id == plan_id).first()
+def get_plan(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    auth_user: AuthUser = Depends(get_current_user),
+):
+    from fastapi import HTTPException
+
+    plan = (
+        db.query(models.Plan)
+        .join(models.User)
+        .filter(models.Plan.id == plan_id, models.User.auth_user_id == auth_user.id)
+        .first()
+    )
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
     return {

@@ -109,19 +109,16 @@ class PlanOut(BaseModel):
 
 
 class WeightLogIn(BaseModel):
-    user_id: int
     weight_kg: float = Field(..., ge=20, le=300)
 
 
 class WorkoutLogIn(BaseModel):
-    user_id: int
     activity: str = Field(..., min_length=1, max_length=100)
     duration_min: int = Field(..., ge=1, le=600)
     calories_burned: Optional[float] = Field(default=0, ge=0, le=5000)
 
 
 class WaterLogIn(BaseModel):
-    user_id: int
     amount_l: float = Field(..., ge=0, le=10)
 
 

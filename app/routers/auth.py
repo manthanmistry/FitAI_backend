@@ -11,6 +11,7 @@ from app.auth_service import (
     user_response,
 )
 from app.database import get_db
+from app.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -73,3 +74,8 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "user": user_response(user),
     }
+
+
+@router.get("/me")
+def me(user: AuthUser = Depends(get_current_user)):
+    return {"user": user_response(user)}

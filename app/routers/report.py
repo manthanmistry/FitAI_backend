@@ -5,13 +5,24 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models
 from app.pdf_service import generate_report_pdf
+from app.auth_models import AuthUser
+from app.deps import get_current_user
 
 router = APIRouter(tags=["report"])
 
 
 @router.get("/download-report")
-def download_report(plan_id: int = Query(...), db: Session = Depends(get_db)):
-    plan = db.query(models.Plan).filter(models.Plan.id == plan_id).first()
+def download_report(
+    plan_id: int = Query(...),
+    db: Session = Depends(get_db),
+    auth_user: AuthUser = Depends(get_current_user),
+):
+    plan = (
+        db.query(models.Plan)
+        .join(models.User)
+        .filter(models.Plan.id == plan_id, models.User.auth_user_id == auth_user.id)
+        .first()
+    )
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
     user = db.query(models.User).filter(models.User.id == plan.user_id).first()
