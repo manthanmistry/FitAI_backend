@@ -1,0 +1,23 @@
+version: 1.0
+runtime: python311
+build:
+  commands:
+    build:
+      - pip install -r requirements.txt
+run:
+  runtime-version: 3.11
+  command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+  network:
+    port: 8000
+    env: PORT
+  env:
+    - name: OPENAI_API_KEY
+      value-from: "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:fitai/openai-api-key"
+    - name: OPENAI_MODEL
+      value: "gpt-4o-mini"
+    - name: DATABASE_URL
+      value: "sqlite:///./fitai.db"
+    - name: CORS_ORIGINS
+      value: "https://your-frontend-domain.com"
+    - name: ENVIRONMENT
+      value: "production"
