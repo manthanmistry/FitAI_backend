@@ -28,11 +28,13 @@ class Settings(BaseSettings):
     def sqlalchemy_database_url(self) -> str:
         # SQLAlchemy 2.1 treats postgresql:// as the psycopg v3 driver.
         # Render provides that URL, and this project installs psycopg2.
-        url = self.database_url
+        url = self.database_url.strip()
         if url.startswith("postgres://"):
-            return "postgresql+psycopg2://" + url[len("postgres://") :]
-        if url.startswith("postgresql://"):
-            return "postgresql+psycopg2://" + url[len("postgresql://") :]
+            url = "postgresql+psycopg2://" + url[len("postgres://") :]
+        elif url.startswith("postgresql://"):
+            url = "postgresql+psycopg2://" + url[len("postgresql://") :]
+        if url.startswith("postgresql") and "render.com" in url and "sslmode=" not in url:
+            url += ("&" if "?" in url else "?") + "sslmode=require"
         return url
 
 

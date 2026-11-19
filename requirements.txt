@@ -12,3 +12,4 @@ passlib[bcrypt]
 bcrypt==4.3.0
 email-validator
 psycopg2
+psycopg[binary]
