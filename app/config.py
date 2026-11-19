@@ -24,6 +24,17 @@ class Settings(BaseSettings):
     def cors_origin_list(self):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    @property
+    def sqlalchemy_database_url(self) -> str:
+        # SQLAlchemy 2.1 treats postgresql:// as the psycopg v3 driver.
+        # Render provides that URL, and this project installs psycopg2.
+        url = self.database_url
+        if url.startswith("postgres://"):
+            return "postgresql+psycopg2://" + url[len("postgres://") :]
+        if url.startswith("postgresql://"):
+            return "postgresql+psycopg2://" + url[len("postgresql://") :]
+        return url
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -3,10 +3,11 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from app.config import get_settings
 
 settings = get_settings()
+database_url = settings.sqlalchemy_database_url
 
-connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
 
-engine = create_engine(settings.database_url, connect_args=connect_args)
+engine = create_engine(database_url, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
@@ -27,7 +28,7 @@ def init_db():
 
 
 def _migrate_sqlite():
-    if not settings.database_url.startswith("sqlite"):
+    if not database_url.startswith("sqlite"):
         return
     with engine.begin() as conn:
         tables = {
