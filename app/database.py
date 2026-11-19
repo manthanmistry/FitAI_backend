@@ -30,6 +30,14 @@ def _migrate_sqlite():
     if not settings.database_url.startswith("sqlite"):
         return
     with engine.begin() as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table'")
+            )
+        }
+        if "users" not in tables:
+            return
         cols = [row[1] for row in conn.execute(text("PRAGMA table_info(users)"))]
-        if "auth_user_id" not in cols:
+        if cols and "auth_user_id" not in cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN auth_user_id INTEGER"))

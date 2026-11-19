@@ -43,3 +43,15 @@ app.include_router(report.router, prefix="/api")
 @app.get("/")
 def root():
     return {"message": "FitAI API is running. See /docs for API documentation."}
+
+
+if __name__ == "__main__":
+    import os
+
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8000")),
+    )
