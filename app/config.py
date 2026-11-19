@@ -3,8 +3,17 @@ Application configuration.
 Reads all secrets and settings from environment variables.
 Never hardcode the OpenAI API key here.
 """
+import os
+import re
+
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+# dpg-abc-a.singapore-postgres.render.com -> dpg-abc-a
+_RENDER_POSTGRES_HOST = re.compile(
+    r"(dpg-[a-z0-9]+-a)\.[a-z0-9-]+-postgres\.render\.com",
+    re.IGNORECASE,
+)
 
 
 class Settings(BaseSettings):
@@ -26,13 +35,28 @@ class Settings(BaseSettings):
 
     @property
     def sqlalchemy_database_url(self) -> str:
-        # SQLAlchemy 2.1 treats postgresql:// as the psycopg v3 driver.
-        # Render provides that URL, and this project installs psycopg2.
         url = self.database_url.strip()
         if url.startswith("postgres://"):
-            url = "postgresql+psycopg2://" + url[len("postgres://") :]
-        elif url.startswith("postgresql://"):
-            url = "postgresql+psycopg2://" + url[len("postgresql://") :]
+            url = "postgresql://" + url[len("postgres://") :]
+
+        # The public Render hostname drops SSL from inside Render.
+        # Use the private hostname when this process is running there.
+        if os.environ.get("RENDER", "").lower() == "true":
+            url = _RENDER_POSTGRES_HOST.sub(r"\1", url)
+            base, sep, query = url.partition("?")
+            if sep:
+                pairs = [
+                    part
+                    for part in query.split("&")
+                    if part and not part.startswith("sslmode=")
+                ]
+                url = base + (("?" + "&".join(pairs)) if pairs else "")
+
+        if url.startswith("postgresql://"):
+            url = "postgresql+psycopg://" + url[len("postgresql://") :]
+        elif url.startswith("postgresql+psycopg2://"):
+            url = "postgresql+psycopg://" + url[len("postgresql+psycopg2://") :]
+
         if url.startswith("postgresql") and "render.com" in url and "sslmode=" not in url:
             url += ("&" if "?" in url else "?") + "sslmode=require"
         return url

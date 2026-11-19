@@ -1,13 +1,21 @@
+import time
+
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.config import get_settings
 
 settings = get_settings()
 database_url = settings.sqlalchemy_database_url
 
-connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
+if database_url.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+elif "render.com" in database_url:
+    connect_args = {"sslmode": "require", "gssencmode": "disable"}
+else:
+    connect_args = {}
 
-engine = create_engine(database_url, connect_args=connect_args)
+engine = create_engine(database_url, connect_args=connect_args, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
@@ -23,8 +31,16 @@ def get_db():
 
 def init_db():
     from app import models, auth_models  # noqa: F401  ensure models are registered
-    Base.metadata.create_all(bind=engine)
-    _migrate_sqlite()
+    last_error = None
+    for attempt in range(5):
+        try:
+            Base.metadata.create_all(bind=engine)
+            _migrate_sqlite()
+            return
+        except OperationalError as exc:
+            last_error = exc
+            time.sleep(2 + attempt)
+    raise last_error
 
 
 def _migrate_sqlite():
